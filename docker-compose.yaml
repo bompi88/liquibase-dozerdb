@@ -1,0 +1,98 @@
+services:
+  # DozerDB does not work
+  dozerdb:
+    hostname: dozerdb
+    container_name: dozerdb
+    image: graphstack/dozerdb:5.24.2.1-alpha.1
+    environment:
+      - NEO4J_AUTH=neo4j/admin123
+    ports:
+      - "7474:7474"
+      - "7687:7687"
+    healthcheck:
+      test: ['CMD', 'wget', '--quiet', '--tries=1', '--spider', 'http://localhost:7474']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  setup-dozerdb:
+    container_name: setup-dozerdb
+    image: neo4j:5.26
+    entrypoint: >
+      /bin/sh -c '
+        echo "CREATE DATABASE persons;" | cypher-shell -u neo4j -p admin123 -a "dozerdb:7687" --non-interactive --format plain;
+        touch /db-setup-done;
+      '
+    healthcheck:
+      test: ['CMD', 'test', '-f', '/db-setup-done']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: 'no'
+    depends_on:
+      dozerdb:
+        condition: service_healthy
+
+  liquibase-dozerdb:
+    container_name: liquibase-dozerdb
+    build:
+      dockerfile: Dockerfile
+    volumes:
+      - ./changelogs/:/liquibase/changelog
+    entrypoint: >
+      /bin/sh -c '
+        liquibase --url='jdbc:neo4j:neo4j://dozerdb:7687?database=persons' --searchPath=/liquibase/changelog --changeLogFile=example.xml --username=neo4j --password=admin123 --log-level=debug update
+      '
+    depends_on:
+      setup-dozerdb:
+        condition: service_completed_successfully
+
+  # Neo4J works
+  neo4j:
+    hostname: neo4j
+    container_name: neo4j
+    image: neo4j:5.26-enterprise
+    environment:
+      - NEO4J_AUTH=neo4j/admin123
+      - NEO4J_ACCEPT_LICENSE_AGREEMENT=yes
+    ports:
+      - "7474:7474"
+      - "7687:7687"
+    healthcheck:
+      test: ['CMD', 'wget', '--quiet', '--tries=1', '--spider', 'http://localhost:7474']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  setup-neo4j:
+    container_name: setup-neo4j
+    image: neo4j:5.26
+    entrypoint: >
+      /bin/sh -c '
+        echo "CREATE DATABASE persons;" | cypher-shell -u neo4j -p admin123 -a "neo4j:7687" --non-interactive --format plain;
+        touch /db-setup-done;
+      '
+    healthcheck:
+      test: ['CMD', 'test', '-f', '/db-setup-done']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: 'no'
+    depends_on:
+      neo4j:
+        condition: service_healthy
+
+  liquibase-neo4j:
+    container_name: liquibase-neo4j
+    build:
+      dockerfile: Dockerfile
+    volumes:
+      - ./changelogs/:/liquibase/changelog
+    entrypoint: >
+      /bin/sh -c '
+      echo "Migrating database: $$NEO4J_URL";
+      liquibase --url='jdbc:neo4j:neo4j://neo4j:7687?database=persons' --searchPath=/liquibase/changelog --changeLogFile=example.xml --username=neo4j --password=admin123 --log-level=debug update
+      '
+    depends_on:
+      setup-neo4j:
+        condition: service_completed_successfully
