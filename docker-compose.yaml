@@ -6,7 +6,6 @@ services:
     image: graphstack/dozerdb:5.24.2.1-alpha.1
     environment:
       - NEO4J_AUTH=neo4j/admin123
-      - NEO4J_ACCEPT_LICENSE_AGREEMENT=yes
     ports:
       - "7474:7474"
       - "7687:7687"
@@ -21,7 +20,7 @@ services:
     image: neo4j:5.26
     entrypoint: >
       /bin/sh -c '
-        echo "CREATE DATABASE persons;" | cypher-shell -u neo4j -p admin123 -a "dozerdb:7687" --non-interactive --format plain;
+        echo "CREATE DATABASE persons IF NOT EXISTS;" | cypher-shell -u neo4j -p admin123 -a "dozerdb:7687" --non-interactive --format plain;
         touch /db-setup-done;
       '
     healthcheck:
